@@ -343,8 +343,14 @@
     (response) => response,    // success — pass through unchanged
     (error) => {
       if (error.response?.status === 401) {
-        // Session expired or not logged in — send to login page
-        window.location.href = "/login";
+        const currentPath = window.location.pathname;
+        const requestUrl = String(error.config?.url || "");
+        const onPublicAuthPage = currentPath === "/login" || currentPath === "/verify";
+        const isAuthEndpoint = requestUrl.startsWith("/auth/");
+
+        if (!onPublicAuthPage && !isAuthEndpoint) {
+          window.location.href = "/login";
+        }
       }
       // Re-throw the error so individual API calls can still catch it
       return Promise.reject(error);
