@@ -19,7 +19,12 @@
     const userRole = currentUser?.role;
   
     // Data state
-    const [stats,      setStats]      = useState(null);
+    const [stats,      setStats]      = useState({
+      verificationsToday: 0,
+      openAnomalies: 0,
+      myBatches: 0,
+      pendingApprovals: 0,
+    });
     const [anomalies,  setAnomalies]  = useState([]);
   
     // UI state
@@ -35,7 +40,20 @@
       const loadDashboard = async () => {
         try {
           const res = await dashboardApi.getStats();
-          setStats(res.data.stats);
+          const payload = res.data || {};
+          const statsData = payload.stats || payload.totals || {};
+          setStats({
+            verificationsToday:
+              statsData.verificationsToday ??
+              statsData.verifiedUsers ??
+              0,
+            openAnomalies: statsData.openAnomalies ?? 0,
+            myBatches: statsData.myBatches ?? 0,
+            pendingApprovals:
+              statsData.pendingApprovals ??
+              statsData.pendingBatches ??
+              0,
+          });
   
           // Anomaly feed: only relevant for regulators and admins
           if (userRole === "regulator" || userRole === "admin") {
@@ -63,8 +81,10 @@
         {/* Page header with personalised greeting */}
         <div className="page-header">
           <h2>Dashboard</h2>
-          <p>Welcome back, <strong>{currentUser.name}</strong>
-             &nbsp;·&nbsp; {currentUser.orgName}</p>
+          <p>
+            Welcome back, <strong>{currentUser?.fullName || currentUser?.name || currentUser?.email || "User"}</strong>
+            &nbsp;·&nbsp; Role: {currentUser?.role || "n/a"}
+          </p>
         </div>
   
         {/* ── STATS GRID ─────────────────────────────────────────── */}
