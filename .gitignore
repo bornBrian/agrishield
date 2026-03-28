@@ -1,0 +1,65 @@
+# Git Ignore for AgriShield
+
+# Environment & Credentials
+.env
+.env.local
+.env.*.local
+.agrishield.env
+*.pem
+*.key
+*.jks
+agrishield-signing.jks
+
+# IDE
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+.DS_Store
+*.swp
+*.swo
+
+# Build artifacts
+target/
+dist/
+build/
+node_modules/
+*.war
+*.jar
+*.class
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# Database
+*.db
+*.sqlite
+db/migration/*.sql  # Generated migrations
+
+# Certificates (Local testing)
+*.crt
+*.csr
+ssl/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Archives
+/agrishield/backups/
+/home/agrishield/backups/
+
+# Private files
+PRIVATE_*
+SECRET_*
+credentials.json
+secrets.yaml
