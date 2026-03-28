@@ -16,8 +16,8 @@
       },
     },
     build: {
-      // Build output goes into the Java webapp folder so Tomcat serves it
-      outDir: "../src/main/webapp/react-dist",
+      // On Vercel, use dist. Locally, keep Java webapp output for Tomcat.
+      outDir: process.env.VERCEL ? "dist" : "../src/main/webapp/react-dist",
       emptyOutDir: true,
     },
   });
