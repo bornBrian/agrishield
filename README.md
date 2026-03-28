@@ -48,6 +48,15 @@ AgriShield is designed with practical security controls to reduce common attack 
 - Java runtime target upgraded to Java 25 (latest LTS requested).
 - Maven build/test path validated on Java 25.
 - Frontend auth flow now includes:
+
+## Supabase Database Setup (Recommended)
+- AgriShield now supports external PostgreSQL via environment variables: `DB_URL`, `DB_USER`, `DB_PASSWORD`.
+- Run interactive setup from CLI:
+   - `Set-Location "D:\agrishield"`
+   - `.\setup-supabase.ps1 -RunMigration`
+- Use Supabase JDBC URL format:
+   - `jdbc:postgresql://db.<project-ref>.supabase.co:5432/postgres?sslmode=require`
+- After setup, use the same DB variables in your backend hosting environment (Railway/Render/Fly/VPS).
   - Username/password login
   - Google login
   - Apple login

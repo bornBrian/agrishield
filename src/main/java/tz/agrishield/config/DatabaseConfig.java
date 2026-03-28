@@ -10,10 +10,9 @@ public class DatabaseConfig {
 
     static {
         HikariConfig config = new HikariConfig();
-        // Use the same credentials from your pom.xml
-        config.setJdbcUrl("jdbc:postgresql://localhost:5432/agrishield");
-        config.setUsername("postgres");
-        config.setPassword("brianbon2?A");
+        config.setJdbcUrl(readEnv("DB_URL", "jdbc:postgresql://localhost:5432/agrishield"));
+        config.setUsername(readEnv("DB_USER", "postgres"));
+        config.setPassword(readEnv("DB_PASSWORD", "postgres"));
         config.setDriverClassName("org.postgresql.Driver");
 
         // Optimization settings
@@ -33,5 +32,13 @@ public class DatabaseConfig {
         if (dataSource != null) {
             dataSource.close();
         }
+    }
+
+    private static String readEnv(String key, String defaultValue) {
+        String value = System.getenv(key);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        return value;
     }
 }

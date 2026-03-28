@@ -16,6 +16,9 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <tomee.version>9.1.1</tomee.version>
         <jakarta.ee.version>9.1.0</jakarta.ee.version>
+        <db.url>jdbc:postgresql://localhost:5432/agrishield</db.url>
+        <db.user>postgres</db.user>
+        <db.password>postgres</db.password>
     </properties>
 
     <dependencies>
@@ -145,9 +148,9 @@
                 <artifactId>flyway-maven-plugin</artifactId>
                 <version>10.15.0</version>
                 <configuration>
-                    <url>jdbc:postgresql://localhost:5432/agrishield</url>
-                    <user>postgres</user>
-                    <password>brianbon2?A</password>
+                    <url>${db.url}</url>
+                    <user>${db.user}</user>
+                    <password>${db.password}</password>
                 </configuration>
                 <dependencies>
                     <dependency>
