@@ -69,7 +69,7 @@ export function isExpired(iso) {
 }
 
 export function isDebugEnabled() {
-  return String(process.env.AUTH_DEBUG_RESET_CODE || "true").toLowerCase() === "true";
+  return String(process.env.AUTH_DEBUG_RESET_CODE || "true").trim().toLowerCase() === "true";
 }
 
 export function signSession(user) {
@@ -123,10 +123,10 @@ export function ensureRoleAllowed(role) {
 }
 
 export async function sendSms(phone, message) {
-  const enabled = String(process.env.TWILIO_ENABLED || "false").toLowerCase() === "true";
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_PHONE_NUMBER;
+  const enabled = String(process.env.TWILIO_ENABLED || "false").trim().toLowerCase() === "true";
+  const sid = String(process.env.TWILIO_ACCOUNT_SID || "").trim();
+  const token = String(process.env.TWILIO_AUTH_TOKEN || "").trim();
+  const from = String(process.env.TWILIO_PHONE_NUMBER || "").trim();
 
   if (!enabled || !sid || !token || !from || !phone) {
     return false;

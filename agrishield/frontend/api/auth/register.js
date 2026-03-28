@@ -60,9 +60,9 @@ export default async function handler(req, res) {
 
     if (verifyCodeError) return json(res, 500, { message: "VERIFY_CODE_CREATE_FAILED" });
 
-    await sendSms(phone, `AgriShield: Your verification code is ${code}. Valid for 15 minutes.`);
+    const smsSent = await sendSms(phone, `AgriShield: Your verification code is ${code}. Valid for 15 minutes.`);
 
-    if (isDebugEnabled()) {
+    if (isDebugEnabled() || !smsSent) {
       return json(res, 200, {
         accepted: true,
         message: "Registration received. Verify your account with the code sent.",
