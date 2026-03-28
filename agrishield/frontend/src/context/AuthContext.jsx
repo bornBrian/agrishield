@@ -36,6 +36,16 @@ export function AuthProvider({ children }) {
     return res.data;
   };
 
+  const register = async (fullName, email, password, role, phone) => {
+    const res = await authApi.register(fullName, email, password, role, phone);
+    return res.data;
+  };
+
+  const verifyAccount = async (email, code) => {
+    const res = await authApi.verifyAccount(email, code);
+    return res.data;
+  };
+
   const logout = async () => {
     await authApi.logout();
     setCurrentUser(null);
@@ -53,6 +63,8 @@ export function AuthProvider({ children }) {
     socialLogin,
     requestPasswordReset,
     resetPassword,
+    register,
+    verifyAccount,
     logout,
     isManufacturer,
     isRegulator,

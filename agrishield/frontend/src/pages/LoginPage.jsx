@@ -14,7 +14,7 @@
   
   export default function LoginPage() {
   
-    const { login, socialLogin, requestPasswordReset, resetPassword } = useAuth();
+    const { login, socialLogin, requestPasswordReset, resetPassword, register, verifyAccount } = useAuth();
     const navigate   = useNavigate();  // programmatic navigation
   
     // ── FORM STATE ────────────────────────────────────────────────────
@@ -28,12 +28,20 @@
     const [resetCode, setResetCode] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [resetPreview, setResetPreview] = useState("");
+    const [fullName, setFullName] = useState("");
+    const [registerEmail, setRegisterEmail] = useState("");
+    const [registerPassword, setRegisterPassword] = useState("");
+    const [registerRole, setRegisterRole] = useState("dealer");
+    const [registerPhone, setRegisterPhone] = useState("");
+    const [verifyCode, setVerifyCode] = useState("");
+    const [verifyPreview, setVerifyPreview] = useState("");
   
     // ── UI STATE ──────────────────────────────────────────────────────
     const [loading,    setLoading]    = useState(false);
     const [error,      setError]      = useState(null);   // null = no error
     const [needsTotp,  setNeedsTotp]  = useState(false);  // show TOTP step?
     const [showForgot, setShowForgot] = useState(false);
+    const [showRegister, setShowRegister] = useState(false);
     const [info, setInfo] = useState(null);
   
     // ── FORM SUBMIT HANDLER ───────────────────────────────────────────
@@ -63,6 +71,8 @@
           setError("Incorrect email or password.");
         } else if (status === 423) {
           setError("Account locked after too many failed attempts. Try again in 30 minutes.");
+        } else if (status === 403 && message === "ACCOUNT_NOT_VERIFIED") {
+          setError("Account not verified. Complete verification first.");
         } else {
           setError("Connection failed. Check your internet and try again.");
         }
@@ -127,6 +137,49 @@
           setError("New password must be at least 8 characters.");
         } else {
           setError("Password reset failed.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleRegister = async (e) => {
+      e.preventDefault();
+      setError(null);
+      setInfo(null);
+      setLoading(true);
+      try {
+        const result = await register(fullName, registerEmail, registerPassword, registerRole, registerPhone || null);
+        setInfo(result.message || "Registration created. Verify your account now.");
+        setVerifyPreview(result.previewCode || "");
+      } catch (err) {
+        const message = err.response?.data?.message;
+        if (message === "ACCOUNT_EXISTS") {
+          setError("Account already exists. Please sign in.");
+        } else if (message === "PASSWORD_POLICY_FAILED") {
+          setError("Password must be at least 8 characters with upper/lower/number/special.");
+        } else {
+          setError("Registration failed. Check your details and try again.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleVerify = async (e) => {
+      e.preventDefault();
+      setError(null);
+      setInfo(null);
+      setLoading(true);
+      try {
+        const result = await verifyAccount(registerEmail, verifyCode);
+        setInfo(result.message || "Account verified. You can sign in now.");
+      } catch (err) {
+        const message = err.response?.data?.message;
+        if (message === "VERIFY_CODE_INVALID") {
+          setError("Invalid or expired verification code.");
+        } else {
+          setError("Verification failed.");
         }
       } finally {
         setLoading(false);
@@ -241,6 +294,10 @@
             {showForgot ? "Back to sign in" : "Forgot password?"}
           </button>
 
+          <button type="button" className="link-button" onClick={() => setShowRegister((value) => !value)}>
+            {showRegister ? "Back to sign in" : "Create account"}
+          </button>
+
           {showForgot && (
             <div className="forgot-card">
               <form onSubmit={handleForgotRequest}>
@@ -286,6 +343,90 @@
 
               {resetPreview && (
                 <small>Demo reset code: <strong>{resetPreview}</strong> (replace with SMS integration in production)</small>
+              )}
+            </div>
+          )}
+
+          {showRegister && (
+            <div className="forgot-card">
+              <form onSubmit={handleRegister}>
+                <div className="form-group">
+                  <label htmlFor="fullName">Full name</label>
+                  <input
+                    id="fullName"
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Your full name"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="registerEmail">Email</label>
+                  <input
+                    id="registerEmail"
+                    type="email"
+                    value={registerEmail}
+                    onChange={(e) => setRegisterEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="registerPassword">Password</label>
+                  <input
+                    id="registerPassword"
+                    type="password"
+                    value={registerPassword}
+                    onChange={(e) => setRegisterPassword(e.target.value)}
+                    placeholder="Strong password"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="registerRole">Role</label>
+                  <select
+                    id="registerRole"
+                    value={registerRole}
+                    onChange={(e) => setRegisterRole(e.target.value)}
+                    required
+                  >
+                    <option value="dealer">Dealer</option>
+                    <option value="distributor">Distributor</option>
+                    <option value="manufacturer">Manufacturer</option>
+                    <option value="farmer">Farmer</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="registerPhone">Phone (for SMS verification)</label>
+                  <input
+                    id="registerPhone"
+                    type="tel"
+                    value={registerPhone}
+                    onChange={(e) => setRegisterPhone(e.target.value)}
+                    placeholder="+2557..."
+                  />
+                </div>
+                <button type="submit" className="btn-secondary" disabled={loading}>Register</button>
+              </form>
+
+              <form onSubmit={handleVerify}>
+                <div className="form-group">
+                  <label htmlFor="verifyCode">Verification code</label>
+                  <input
+                    id="verifyCode"
+                    type="text"
+                    value={verifyCode}
+                    onChange={(e) => setVerifyCode(e.target.value)}
+                    placeholder="6-digit code"
+                    required
+                  />
+                </div>
+                <button type="submit" className="btn-primary" disabled={loading}>Verify account</button>
+              </form>
+
+              {verifyPreview && (
+                <small>Demo verification code: <strong>{verifyPreview}</strong> (SMS in production)</small>
               )}
             </div>
           )}

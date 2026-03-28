@@ -45,6 +45,7 @@ public class AuthServlet extends HttpServlet {
 
     private static final Map<String, UserRecord> USERS = new ConcurrentHashMap<>();
     private static final Map<String, ResetCode> RESET_CODES = new ConcurrentHashMap<>();
+    private static final Map<String, VerifyCode> VERIFY_CODES = new ConcurrentHashMap<>();
 
     private static final Set<String> WEB_ALLOWED_ROLES = Set.of("admin", "regulator", "manufacturer", "distributor", "dealer");
 
@@ -65,7 +66,7 @@ public class AuthServlet extends HttpServlet {
 
     private static void seed(String email, String fullName, String role, String password, boolean totpRequired) {
         String hash = ARGON2.hash(3, 65536, 1, password);
-        USERS.put(email.toLowerCase(), new UserRecord(UUID.randomUUID().toString(), fullName, email, role, hash, totpRequired));
+        USERS.put(email.toLowerCase(), new UserRecord(UUID.randomUUID().toString(), fullName, email, role, hash, totpRequired, true, null));
     }
 
     @Override
@@ -85,6 +86,8 @@ public class AuthServlet extends HttpServlet {
             case "/login" -> handleLogin(req, resp);
             case "/logout" -> handleLogout(req, resp);
             case "/social" -> handleSocial(req, resp);
+            case "/register" -> handleRegister(req, resp);
+            case "/verify" -> handleVerify(req, resp);
             case "/password/forgot" -> handleForgot(req, resp);
             case "/password/reset" -> handleReset(req, resp);
             default -> json(resp, HttpServletResponse.SC_NOT_FOUND, Map.of("message", "NOT_FOUND"));
@@ -100,6 +103,11 @@ public class AuthServlet extends HttpServlet {
         UserRecord user = USERS.get(email);
         if (user == null || password == null || !ARGON2.verify(user.passwordHash(), password)) {
             json(resp, HttpServletResponse.SC_UNAUTHORIZED, Map.of("message", "INVALID_CREDENTIALS"));
+            return;
+        }
+
+        if (!user.verified()) {
+            json(resp, HttpServletResponse.SC_FORBIDDEN, Map.of("message", "ACCOUNT_NOT_VERIFIED"));
             return;
         }
 
@@ -148,6 +156,103 @@ public class AuthServlet extends HttpServlet {
 
         createSession(req, user.email(), provider);
         json(resp, HttpServletResponse.SC_OK, userDto(user, provider));
+    }
+
+    private void handleRegister(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        Map<String, Object> body = readJson(req);
+        String fullName = text(body.get("fullName"));
+        String email = lower(text(body.get("email")));
+        String password = text(body.get("password"));
+        String role = lower(text(body.get("role")));
+        String phone = text(body.get("phone"));
+
+        if (fullName == null || email == null || password == null) {
+            json(resp, HttpServletResponse.SC_BAD_REQUEST, Map.of("message", "REGISTER_INPUT_INVALID"));
+            return;
+        }
+
+        if (!email.contains("@")) {
+            json(resp, HttpServletResponse.SC_BAD_REQUEST, Map.of("message", "EMAIL_INVALID"));
+            return;
+        }
+
+        if (!isStrongPassword(password)) {
+            json(resp, HttpServletResponse.SC_BAD_REQUEST, Map.of("message", "PASSWORD_POLICY_FAILED"));
+            return;
+        }
+
+        if (USERS.containsKey(email)) {
+            json(resp, HttpServletResponse.SC_CONFLICT, Map.of("message", "ACCOUNT_EXISTS"));
+            return;
+        }
+
+        String finalRole = role == null ? "dealer" : role;
+        if (!Set.of("manufacturer", "distributor", "dealer", "farmer").contains(finalRole)) {
+            json(resp, HttpServletResponse.SC_BAD_REQUEST, Map.of("message", "ROLE_INVALID"));
+            return;
+        }
+
+        String hash = ARGON2.hash(3, 65536, 1, password);
+        UserRecord user = new UserRecord(UUID.randomUUID().toString(), fullName, email, finalRole, hash, false, false, phone);
+        USERS.put(email, user);
+
+        String code = String.valueOf((int) (Math.random() * 900000) + 100000);
+        VERIFY_CODES.put(email, new VerifyCode(email, code, Instant.now().plusSeconds(15 * 60), false));
+
+        if (isSmsEnabled() && phone != null && !phone.isBlank()) {
+            try {
+                sendVerificationCodeViaSMS(phone, code);
+            } catch (Exception e) {
+                Logger.getLogger(AuthServlet.class.getName()).warning("Verification SMS send failed: " + e.getMessage());
+            }
+        }
+
+        if (isDebugResetEnabled()) {
+            json(resp, HttpServletResponse.SC_OK, Map.of(
+                "accepted", true,
+                "message", "Registration received. Verify your account with the code sent.",
+                "previewCode", code,
+                "expiresInMinutes", 15
+            ));
+            return;
+        }
+
+        json(resp, HttpServletResponse.SC_OK, Map.of(
+            "accepted", true,
+            "message", "Registration received. Verify your account with the code sent."
+        ));
+    }
+
+    private void handleVerify(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        Map<String, Object> body = readJson(req);
+        String email = lower(text(body.get("email")));
+        String code = text(body.get("code"));
+
+        if (email == null || code == null) {
+            json(resp, HttpServletResponse.SC_BAD_REQUEST, Map.of("message", "VERIFY_INPUT_INVALID"));
+            return;
+        }
+
+        VerifyCode token = VERIFY_CODES.get(email);
+        if (token == null || token.used() || token.expiresAt().isBefore(Instant.now()) || !Objects.equals(token.code(), code)) {
+            json(resp, HttpServletResponse.SC_BAD_REQUEST, Map.of("message", "VERIFY_CODE_INVALID"));
+            return;
+        }
+
+        UserRecord user = USERS.get(email);
+        if (user == null) {
+            json(resp, HttpServletResponse.SC_BAD_REQUEST, Map.of("message", "ACCOUNT_NOT_FOUND"));
+            return;
+        }
+
+        UserRecord verifiedUser = new UserRecord(user.id(), user.fullName(), user.email(), user.role(), user.passwordHash(), user.totpRequired(), true, user.phone());
+        USERS.put(email, verifiedUser);
+        VERIFY_CODES.put(email, new VerifyCode(token.email(), token.code(), token.expiresAt(), true));
+
+        json(resp, HttpServletResponse.SC_OK, Map.of(
+            "success", true,
+            "message", "Account verified successfully. You can now sign in."
+        ));
     }
 
     private void handleForgot(HttpServletRequest req, HttpServletResponse resp) throws IOException {
@@ -217,7 +322,7 @@ public class AuthServlet extends HttpServlet {
         }
 
         String hash = ARGON2.hash(3, 65536, 1, newPassword);
-        USERS.put(lower(user.email()), new UserRecord(user.id(), user.fullName(), user.email(), user.role(), hash, user.totpRequired()));
+        USERS.put(lower(user.email()), new UserRecord(user.id(), user.fullName(), user.email(), user.role(), hash, user.totpRequired(), user.verified(), user.phone()));
         RESET_CODES.put(code, new ResetCode(token.email(), token.expiresAt(), true));
 
         json(resp, HttpServletResponse.SC_OK, Map.of("success", true, "message", "Password reset successful. You can now sign in."));
@@ -285,6 +390,24 @@ public class AuthServlet extends HttpServlet {
         } catch (Exception e) {
             throw new RuntimeException("Failed to send SMS: " + e.getMessage(), e);
         }
+    }
+
+    private void sendVerificationCodeViaSMS(String toPhone, String code) {
+        String accountSid = System.getenv("TWILIO_ACCOUNT_SID");
+        String authToken = System.getenv("TWILIO_AUTH_TOKEN");
+        String fromNumber = System.getenv("TWILIO_PHONE_NUMBER");
+
+        if (accountSid == null || authToken == null || fromNumber == null) {
+            throw new IllegalStateException("Twilio not configured");
+        }
+
+        Twilio.init(accountSid, authToken);
+        String message = String.format(
+            "AgriShield: Your account verification code is %s. Valid for 15 minutes.",
+            code
+        );
+
+        Message.creator(new PhoneNumber(toPhone), new PhoneNumber(fromNumber), message).create();
     }
 
     private boolean isSmsEnabled() {
@@ -370,6 +493,7 @@ public class AuthServlet extends HttpServlet {
             "fullName", user.fullName(),
             "email", user.email(),
             "role", user.role(),
+            "verified", user.verified(),
             "authProvider", provider
         );
     }
@@ -400,7 +524,9 @@ public class AuthServlet extends HttpServlet {
         return value == null ? null : value.toLowerCase();
     }
 
-    private record UserRecord(String id, String fullName, String email, String role, String passwordHash, boolean totpRequired) {}
+    private record UserRecord(String id, String fullName, String email, String role, String passwordHash, boolean totpRequired, boolean verified, String phone) {}
 
     private record ResetCode(String email, Instant expiresAt, boolean used) {}
+
+    private record VerifyCode(String email, String code, Instant expiresAt, boolean used) {}
 }

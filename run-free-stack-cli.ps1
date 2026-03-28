@@ -89,7 +89,7 @@ Write-Host "Backend public URL: $publicUrl" -ForegroundColor Green
 
 Step "Deploy frontend to Vercel with backend URL"
 Set-Location "D:\agrishield\agrishield\frontend"
-"VITE_AUTH_MODE=api`nVITE_API_BASE_URL=$publicUrl" | Out-File -Encoding utf8 ".env.production"
+"VITE_AUTH_MODE=api`nVITE_API_BASE_URL=$publicUrl/api" | Out-File -Encoding utf8 ".env.production"
 vercel --prod --yes
 
 Step "Completed"

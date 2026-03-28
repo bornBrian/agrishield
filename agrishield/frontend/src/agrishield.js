@@ -3,6 +3,7 @@
 
   const AUTH_STORAGE_KEY = "agrishield_auth_user";
   const RESET_STORAGE_KEY = "agrishield_reset_tokens";
+  const VERIFY_STORAGE_KEY = "agrishield_verify_tokens";
   const AUTH_MODE = (import.meta.env.VITE_AUTH_MODE || "api").toLowerCase();
 
   const DEMO_USERS = [
@@ -13,6 +14,7 @@
       role: "admin",
       password: "Admin#123",
       totpRequired: true,
+      verified: true,
     },
     {
       id: "u-reg-1",
@@ -21,6 +23,7 @@
       role: "regulator",
       password: "Regulator#123",
       totpRequired: true,
+      verified: true,
     },
     {
       id: "u-mfr-1",
@@ -29,6 +32,7 @@
       role: "manufacturer",
       password: "Manufacturer#123",
       totpRequired: false,
+      verified: true,
     },
     {
       id: "u-dist-1",
@@ -37,6 +41,7 @@
       role: "distributor",
       password: "Distributor#123",
       totpRequired: false,
+      verified: true,
     },
     {
       id: "u-dealer-1",
@@ -45,6 +50,7 @@
       role: "dealer",
       password: "Dealer#123",
       totpRequired: false,
+      verified: true,
     },
     {
       id: "u-farmer-1",
@@ -53,6 +59,7 @@
       role: "farmer",
       password: "Farmer#123",
       totpRequired: false,
+      verified: true,
     },
   ];
 
@@ -102,6 +109,19 @@
     localStorage.setItem(RESET_STORAGE_KEY, JSON.stringify(tokens));
   }
 
+  function readVerifyTokens() {
+    try {
+      const raw = localStorage.getItem(VERIFY_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function writeVerifyTokens(tokens) {
+    localStorage.setItem(VERIFY_STORAGE_KEY, JSON.stringify(tokens));
+  }
+
   function mockResponse(data) {
     return Promise.resolve({ data });
   }
@@ -111,6 +131,12 @@
     if (!user || user.password !== password) {
       const error = new Error("Invalid credentials");
       error.response = { status: 401, data: { message: "INVALID_CREDENTIALS" } };
+      return Promise.reject(error);
+    }
+
+    if (!user.verified) {
+      const error = new Error("Account not verified");
+      error.response = { status: 403, data: { message: "ACCOUNT_NOT_VERIFIED" } };
       return Promise.reject(error);
     }
 
@@ -222,6 +248,80 @@
       message: "Password reset successful. You can now sign in.",
     });
   }
+
+  function registerUser(fullName, email, password, role, phone) {
+    const normalizedEmail = String(email || "").toLowerCase().trim();
+    if (!fullName || !normalizedEmail || !password) {
+      const error = new Error("Invalid registration payload");
+      error.response = { status: 400, data: { message: "REGISTER_INPUT_INVALID" } };
+      return Promise.reject(error);
+    }
+
+    if (mockState.users.has(normalizedEmail)) {
+      const error = new Error("Account exists");
+      error.response = { status: 409, data: { message: "ACCOUNT_EXISTS" } };
+      return Promise.reject(error);
+    }
+
+    const finalRole = (role || "dealer").toLowerCase();
+    const user = {
+      id: `u-${Date.now()}`,
+      fullName,
+      email: normalizedEmail,
+      role: finalRole,
+      password,
+      phone: phone || null,
+      totpRequired: false,
+      verified: false,
+    };
+    mockState.users.set(normalizedEmail, user);
+
+    const code = randomCode();
+    const verifyTokens = readVerifyTokens();
+    verifyTokens[normalizedEmail] = {
+      code,
+      expiresAt: Date.now() + 15 * 60 * 1000,
+      used: false,
+    };
+    writeVerifyTokens(verifyTokens);
+
+    return mockResponse({
+      accepted: true,
+      message: "Registration received. Verify your account with the code sent.",
+      previewCode: code,
+      expiresInMinutes: 15,
+    });
+  }
+
+  function verifyRegistration(email, code) {
+    const normalizedEmail = String(email || "").toLowerCase().trim();
+    const normalizedCode = String(code || "").trim();
+    const verifyTokens = readVerifyTokens();
+    const token = verifyTokens[normalizedEmail];
+
+    if (!token || token.used || token.expiresAt < Date.now() || token.code !== normalizedCode) {
+      const error = new Error("Invalid verification code");
+      error.response = { status: 400, data: { message: "VERIFY_CODE_INVALID" } };
+      return Promise.reject(error);
+    }
+
+    const user = mockState.users.get(normalizedEmail);
+    if (!user) {
+      const error = new Error("Account not found");
+      error.response = { status: 400, data: { message: "ACCOUNT_NOT_FOUND" } };
+      return Promise.reject(error);
+    }
+
+    user.verified = true;
+    mockState.users.set(normalizedEmail, user);
+    verifyTokens[normalizedEmail] = { ...token, used: true };
+    writeVerifyTokens(verifyTokens);
+
+    return mockResponse({
+      success: true,
+      message: "Account verified successfully. You can now sign in.",
+    });
+  }
   
   // ── CREATE THE AXIOS INSTANCE ────────────────────────────────────────
   // baseURL: every API call automatically prepends this.
@@ -300,6 +400,16 @@
       AUTH_MODE === "mock"
         ? resetPassword(code, newPassword)
         : apiClient.post("/auth/password/reset", { code, newPassword }),
+
+    register: (fullName, email, password, role, phone) =>
+      AUTH_MODE === "mock"
+        ? registerUser(fullName, email, password, role, phone)
+        : apiClient.post("/auth/register", { fullName, email, password, role, phone }),
+
+    verifyAccount: (email, code) =>
+      AUTH_MODE === "mock"
+        ? verifyRegistration(email, code)
+        : apiClient.post("/auth/verify", { email, code }),
   
   };
   

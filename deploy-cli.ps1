@@ -37,6 +37,10 @@ if (-not $BackendApiUrl.StartsWith('http')) {
     throw "BackendApiUrl must start with http:// or https://"
 }
 
+if (-not $BackendApiUrl.EndsWith('/api')) {
+    $BackendApiUrl = "$($BackendApiUrl.TrimEnd('/'))/api"
+}
+
 Step "Configure git remote"
 $originExists = (git remote) -contains 'origin'
 if ($originExists) {
